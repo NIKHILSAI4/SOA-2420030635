@@ -1,0 +1,161 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: recruitment-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: recruitment
+      POSTGRES_PASSWORD: recruitment_pass
+      POSTGRES_DB: recruitment_master
+    volumes:
+      - ./init-scripts:/docker-entrypoint-initdb.d
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recruitment -d recruitment_master"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - recruitment-net
+
+  eureka-server:
+    build: ./eureka-server
+    container_name: recruitment-eureka
+    ports:
+      - "8761:8761"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    networks:
+      - recruitment-net
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: recruitment-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+      - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+    depends_on:
+      - eureka-server
+    networks:
+      - recruitment-net
+
+  auth-service:
+    build: ./auth-service
+    container_name: recruitment-auth
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/auth_db
+      - SPRING_DATASOURCE_USERNAME=recruitment
+      - SPRING_DATASOURCE_PASSWORD=recruitment_pass
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+      - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    networks:
+      - recruitment-net
+
+  nlp-service:
+    build: ./nlp-service
+    container_name: recruitment-nlp
+    ports:
+      - "8000:8000"
+    networks:
+      - recruitment-net
+
+  resume-service:
+    build: ./resume-service
+    container_name: recruitment-resume
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/resume_db
+      - SPRING_DATASOURCE_USERNAME=recruitment
+      - SPRING_DATASOURCE_PASSWORD=recruitment_pass
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+      - NLP_SERVICE_URL=http://nlp-service:8000
+      - UPLOAD_DIR=/uploads/resumes
+    volumes:
+      - resume-uploads:/uploads/resumes
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+      nlp-service:
+        condition: service_started
+    networks:
+      - recruitment-net
+
+  job-service:
+    build: ./job-service
+    container_name: recruitment-job
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/job_db
+      - SPRING_DATASOURCE_USERNAME=recruitment
+      - SPRING_DATASOURCE_PASSWORD=recruitment_pass
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+      - NLP_SERVICE_URL=http://nlp-service:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    networks:
+      - recruitment-net
+
+  matching-service:
+    build: ./matching-service
+    container_name: recruitment-matching
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/match_db
+      - SPRING_DATASOURCE_USERNAME=recruitment
+      - SPRING_DATASOURCE_PASSWORD=recruitment_pass
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+      - NLP_SERVICE_URL=http://nlp-service:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+      nlp-service:
+        condition: service_started
+    networks:
+      - recruitment-net
+
+  frontend:
+    build: ./frontend
+    container_name: recruitment-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_GATEWAY_URL=http://localhost:8080
+    depends_on:
+      - api-gateway
+    networks:
+      - recruitment-net
+
+networks:
+  recruitment-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  resume-uploads:

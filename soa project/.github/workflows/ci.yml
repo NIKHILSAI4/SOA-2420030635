@@ -1,0 +1,75 @@
+name: CI Build & Verify
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Eureka Server
+        run: |
+          cd eureka-server
+          mvn clean package -DskipTests
+
+      - name: Build API Gateway
+        run: |
+          cd api-gateway
+          mvn clean package -DskipTests
+
+      - name: Build Auth Service
+        run: |
+          cd auth-service
+          mvn clean package -DskipTests
+
+      - name: Build Resume Service
+        run: |
+          cd resume-service
+          mvn clean package -DskipTests
+
+      - name: Build Job Service
+        run: |
+          cd job-service
+          mvn clean package -DskipTests
+
+      - name: Build Matching Service
+        run: |
+          cd matching-service
+          mvn clean package -DskipTests
+
+      - name: Test Python NLP Service
+        run: |
+          cd nlp-service
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest
+
+      - name: Build React Frontend
+        run: |
+          cd frontend
+          npm install
+          npm run build
